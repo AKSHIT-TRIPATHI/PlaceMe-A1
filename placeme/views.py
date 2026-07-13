@@ -17,22 +17,55 @@ import threading
 
 def _send_mail_async(subject, message, from_email, recipient_list, html_message=None):
     """
-    Dispatch send_mail in a background daemon thread so the calling view
-    returns immediately without waiting for SMTP.  fail_silently=True means
-    any SMTP error is logged but never propagates to the caller.
+    Send an email in a background daemon thread using a brand-new SMTP
+    connection created inside the thread.
+
+    Why a fresh connection?  Django's default connection pool is NOT
+    thread-safe.  Calling send_mail() from a worker thread on Gunicorn
+    can silently reuse a connection belonging to another thread and fail
+    without raising any exception.  Opening our own EmailBackend instance
+    (with use_tls / credentials read from settings at call time) sidesteps
+    that entirely.
+
+    We log every error explicitly so Render's log stream always shows what
+    went wrong — nothing is swallowed silently.
     """
+    # Snapshot settings values NOW, in the main thread, before handing off.
+    _host     = settings.EMAIL_HOST
+    _port     = settings.EMAIL_PORT
+    _user     = settings.EMAIL_HOST_USER
+    _password = settings.EMAIL_HOST_PASSWORD
+    _use_tls  = settings.EMAIL_USE_TLS
+
     def _worker():
+        from django.core.mail.backends.smtp import EmailBackend
+        from django.core.mail import EmailMultiAlternatives
+
+        print(f"[email] attempting send to {recipient_list} | subject: {subject!r}")
         try:
-            send_mail(
-                subject=subject,
-                message=message,
-                from_email=from_email,
-                recipient_list=recipient_list,
-                html_message=html_message,
-                fail_silently=True,
+            # Open a fresh, thread-local SMTP connection
+            backend = EmailBackend(
+                host=_host,
+                port=_port,
+                username=_user,
+                password=_password,
+                use_tls=_use_tls,
+                fail_silently=False,   # we want the real error in our logs
             )
-        except Exception as exc:  # belt-and-suspenders — should never raise with fail_silently
-            print(f"[email] background send failed: {exc}")
+            mail = EmailMultiAlternatives(
+                subject=subject,
+                body=message,
+                from_email=from_email,
+                to=recipient_list,
+                connection=backend,
+            )
+            if html_message:
+                mail.attach_alternative(html_message, "text/html")
+            mail.send()
+            print(f"[email] sent successfully to {recipient_list}")
+        except Exception as exc:
+            # Log the full error — visible in Render's log stream
+            print(f"[email] FAILED to {recipient_list}: {type(exc).__name__}: {exc}")
 
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
