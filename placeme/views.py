@@ -139,7 +139,7 @@ def signup(request):
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[email],
             html_message=body,
-            fail_silently=False,
+            fail_silently=True,
         )
     except Exception as e:
         print(f"[signup] email send failed: {e}")
