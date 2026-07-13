@@ -51,6 +51,7 @@ def _send_mail_async(subject, message, from_email, recipient_list, html_message=
                 password=_password,
                 use_tls=_use_tls,
                 fail_silently=False,   # we want the real error in our logs
+                timeout=25,            # hard socket timeout — prevents a hung thread
             )
             mail = EmailMultiAlternatives(
                 subject=subject,
@@ -67,8 +68,11 @@ def _send_mail_async(subject, message, from_email, recipient_list, html_message=
             # Log the full error — visible in Render's log stream
             print(f"[email] FAILED to {recipient_list}: {type(exc).__name__}: {exc}")
 
-    t = threading.Thread(target=_worker, daemon=True)
+    t = threading.Thread(target=_worker, daemon=False)
     t.start()
+    # Do NOT join() here — we return the response immediately.
+    # daemon=False ensures Gunicorn does not reap the thread before SMTP finishes.
+    # The thread will complete on its own (SMTP timeout is ~30 s max).
 
 
 
