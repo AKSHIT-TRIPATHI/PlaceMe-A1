@@ -147,16 +147,24 @@ AUTHENTICATION_BACKENDS = [
 
 
 # ---------------------------------------------------------------------------
-# Email — Gmail SMTP
+# Email — Brevo (formerly Sendinblue) HTTP API
+# Render's free tier blocks outbound SMTP (port 587), so we use Brevo's
+# transactional REST API over HTTPS (port 443) instead.
+# Set BREVO_API_KEY, BREVO_SENDER_EMAIL, BREVO_SENDER_NAME in Render's
+# environment variables dashboard.
 # ---------------------------------------------------------------------------
+BREVO_API_KEY      = os.environ.get('BREVO_API_KEY', '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')
+BREVO_SENDER_EMAIL = os.environ.get('BREVO_SENDER_EMAIL', 'placeme143@gmail.com')
+BREVO_SENDER_NAME  = os.environ.get('BREVO_SENDER_NAME', 'PlaceMe AI')
+
+# Keep these for local/fallback reference — not used on Render
 EMAIL_BACKEND       = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST          = 'smtp.gmail.com'
 EMAIL_PORT          = 587
 EMAIL_USE_TLS       = True
 EMAIL_HOST_USER     = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL  = EMAIL_HOST_USER
-SITE_NAME           = 'PlaceMe AI'
+DEFAULT_FROM_EMAIL  = BREVO_SENDER_EMAIL
 
 
 # ---------------------------------------------------------------------------
