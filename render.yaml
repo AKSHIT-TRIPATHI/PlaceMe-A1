@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: placeme-ai
+    runtime: python
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn PlaceMe_AI.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true          # Render auto-generates a secure random value
+      - key: DEBUG
+        value: "False"
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com"       # replace with your custom domain if you add one
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+      # --- Database ---
+      # Uncomment the block below and attach a Render Postgres instance
+      # to get DATABASE_URL injected automatically.
+      # - key: DATABASE_URL
+      #   fromDatabase:
+      #     name: placeme-db
+      #     property: connectionString
+      # --- Email ---
+      - key: EMAIL_HOST_USER
+        sync: false                  # set manually in Render dashboard
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      # --- AI keys ---
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+
+# Uncomment to provision a managed Postgres database on Render.
+# databases:
+#   - name: placeme-db
+#     databaseName: placeme_ai
+#     user: placeme_user
