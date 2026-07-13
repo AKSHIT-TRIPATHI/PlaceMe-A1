@@ -157,7 +157,7 @@ BREVO_API_KEY      = os.environ.get('BREVO_API_KEY', 'xkeysib-c7736c71c263c9ac8e
 BREVO_SENDER_EMAIL = os.environ.get('BREVO_SENDER_EMAIL', 'placeme143@gmail.com')
 BREVO_SENDER_NAME  = os.environ.get('BREVO_SENDER_NAME', 'PlaceMe AI')
 
-# Keep these for local/fallback reference — not used on Render
+# Keep Django's email backend set (unused on Render, harmless to leave)
 EMAIL_BACKEND       = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST          = 'smtp.gmail.com'
 EMAIL_PORT          = 587
