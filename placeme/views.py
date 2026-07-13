@@ -17,62 +17,67 @@ import threading
 
 def _send_mail_async(subject, message, from_email, recipient_list, html_message=None):
     """
-    Send an email in a background daemon thread using a brand-new SMTP
-    connection created inside the thread.
+    Send email via Brevo (formerly Sendinblue) transactional HTTP API.
 
-    Why a fresh connection?  Django's default connection pool is NOT
-    thread-safe.  Calling send_mail() from a worker thread on Gunicorn
-    can silently reuse a connection belonging to another thread and fail
-    without raising any exception.  Opening our own EmailBackend instance
-    (with use_tls / credentials read from settings at call time) sidesteps
-    that entirely.
-
-    We log every error explicitly so Render's log stream always shows what
-    went wrong — nothing is swallowed silently.
+    Render's free tier blocks outbound SMTP (ports 25/465/587), so Django's
+    smtp.EmailBackend always fails with [Errno 101] Network is unreachable.
+    HTTP (port 443) is always open, so we call Brevo's REST API directly
+    using only the stdlib `urllib` — no extra packages required.
     """
-    # Snapshot settings values NOW, in the main thread, before handing off.
-    _host     = settings.EMAIL_HOST
-    _port     = settings.EMAIL_PORT
-    _user     = settings.EMAIL_HOST_USER
-    _password = settings.EMAIL_HOST_PASSWORD
-    _use_tls  = settings.EMAIL_USE_TLS
+    import json
+    import urllib.request
+    import urllib.error
+
+    # Snapshot settings in the main thread before handing off to the worker.
+    _api_key      = getattr(settings, "BREVO_API_KEY", "")
+    _sender_email = getattr(settings, "BREVO_SENDER_EMAIL", from_email)
+    _sender_name  = getattr(settings, "BREVO_SENDER_NAME",
+                            getattr(settings, "SITE_NAME", "PlaceMe AI"))
 
     def _worker():
-        from django.core.mail.backends.smtp import EmailBackend
-        from django.core.mail import EmailMultiAlternatives
-
         print(f"[email] attempting send to {recipient_list} | subject: {subject!r}")
+
+        if not _api_key:
+            print("[email] FAILED: BREVO_API_KEY is not set in environment variables.")
+            return
+
+        payload = {
+            "sender": {"name": _sender_name, "email": _sender_email},
+            "to":     [{"email": addr} for addr in recipient_list],
+            "subject": subject,
+            "textContent": message,
+        }
+        if html_message:
+            payload["htmlContent"] = html_message
+
+        data = json.dumps(payload).encode("utf-8")
+        req  = urllib.request.Request(
+            "https://api.brevo.com/v3/smtp/email",
+            data=data,
+            headers={
+                "Content-Type":  "application/json",
+                "Accept":        "application/json",
+                "api-key":       _api_key,
+            },
+            method="POST",
+        )
+
         try:
-            # Open a fresh, thread-local SMTP connection
-            backend = EmailBackend(
-                host=_host,
-                port=_port,
-                username=_user,
-                password=_password,
-                use_tls=_use_tls,
-                fail_silently=False,   # we want the real error in our logs
-                timeout=25,            # hard socket timeout — prevents a hung thread
-            )
-            mail = EmailMultiAlternatives(
-                subject=subject,
-                body=message,
-                from_email=from_email,
-                to=recipient_list,
-                connection=backend,
-            )
-            if html_message:
-                mail.attach_alternative(html_message, "text/html")
-            mail.send()
-            print(f"[email] sent successfully to {recipient_list}")
+            with urllib.request.urlopen(req, timeout=25) as resp:
+                status = resp.status
+                body   = resp.read().decode("utf-8")
+            if 200 <= status < 300:
+                print(f"[email] sent successfully to {recipient_list} (HTTP {status})")
+            else:
+                print(f"[email] FAILED to {recipient_list}: HTTP {status} — {body}")
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8")
+            print(f"[email] FAILED to {recipient_list}: HTTP {exc.code} — {body}")
         except Exception as exc:
-            # Log the full error — visible in Render's log stream
             print(f"[email] FAILED to {recipient_list}: {type(exc).__name__}: {exc}")
 
     t = threading.Thread(target=_worker, daemon=False)
     t.start()
-    # Do NOT join() here — we return the response immediately.
-    # daemon=False ensures Gunicorn does not reap the thread before SMTP finishes.
-    # The thread will complete on its own (SMTP timeout is ~30 s max).
 
 
 
