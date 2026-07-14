@@ -1,0 +1,22 @@
+/* Theme light overrides */
+
+/* Keep text/colors the same as dark theme; light only tweaks specific dark UI elements. */
+
+:root.theme-light .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+:root.theme-light .btn-signup-blur {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+:root.theme-light .btn-signup-blur:hover {
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.18);
+}
+
+
+
